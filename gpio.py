@@ -117,7 +117,7 @@ class GPIO:
         line = self.read()
         return int(line)
 
-    def mask(self, value):
+    def set_mask(self, value):
         '''
         affect writeall/iodir
         0 to mask out
@@ -126,7 +126,7 @@ class GPIO:
         self.write(f'gpio iomask {value:02x}')
         self.consume()
     
-    def iodir(self, value):
+    def _iodir(self, value):
         '''
         0 for output, 1 for input
         can be overwirtten by subsequent set/clear/read/adc command
@@ -146,15 +146,40 @@ class GPIO:
         self.write(f'id set {value:>8}')
         self.consume()
 
+    def __getitem__(self, channel):
+        if type(channel) == int and channel in range(8):
+            return self.int >> channel & 1
+
+    def __setitem__(self, channel, bit):
+        if type(channel) == int and channel in range(8):
+            self.gpio_write(channel, bit & 1)
+
+    @property
+    def mask(self):
+        return 0
+
+    @mask.setter
+    def mask(self, value):
+        self.set_mask(value)
+
+    @property
+    def iodir(self):
+        return 0
+
+    @mask.setter
+    def iodir(self, value):
+        self._iodir(value)
+
     def __repr__(self):
         return f'<gpio version: {self.version}; id: {self.id}; int: {self.int}>'
 
 @pytest.fixture
 def gpio():
-    global goio
     gpio = GPIO('COM4')
+    gpio.mask = 0xff
+    gpio.iodir = 0
     gpio.int = 0
-    gpio.gpio_write(0, 0)
+    #logging.basicConfig(level=logging.DEBUG)
     return gpio
 
 def test_id(gpio):
@@ -169,9 +194,30 @@ def test_version(gpio):
     assert gpio.version == '00000008'
 
 def test_int(gpio):
-    assert 0 == gpio.int
     gpio.int = 0xff
     assert 0xff == gpio.int
+    gpio.int = 0
+
+def test_index(gpio):
+    gpio.mask = 0xff
+    gpio.int = 0
+    gpio[3] = 1
+    assert gpio[3] == 1
+    assert gpio.int == 8
+    gpio[3] = 0
+    assert gpio[3] == 0
+    assert gpio.int == 0
+
+def test_mask(gpio):
+    gpio.int = 0xff
+    assert gpio.int == 0xff
+    gpio.mask = 0xaa
+    gpio.int = 0
+    assert gpio.int == 0x55
+    gpio[0] = 0
+    gpio.int = 0xff
+    assert gpio.int == 0xfe
+    gpio.mask = 0xff
     gpio.int = 0
 
 def main(port, channel):
